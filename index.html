@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ultralytics Web UI</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Ultralytics 训练图形界面</h1>
+      <p>配置训练、管理数据集、可视化并编辑 YOLO 网络结构</p>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2>训练配置</h2>
+        <form id="training-form" class="grid-2">
+          <label>模型
+            <select id="model">
+              <option>yolo11n.pt</option>
+              <option>yolo11s.pt</option>
+              <option>yolo11m.pt</option>
+            </select>
+          </label>
+          <label>设备
+            <select id="device">
+              <option>cpu</option>
+              <option>cuda:0</option>
+            </select>
+          </label>
+          <label>Epochs<input id="epochs" type="number" min="1" max="500" value="100" /></label>
+          <label>Batch<input id="batch" type="number" min="1" max="512" value="16" /></label>
+          <label>Image Size<input id="imgsz" type="number" min="64" max="2048" value="640" /></label>
+          <label>Learning Rate<input id="lr0" type="number" min="0.00001" step="0.00001" value="0.01" /></label>
+          <label>优化器
+            <select id="optimizer">
+              <option>SGD</option>
+              <option>Adam</option>
+              <option>AdamW</option>
+            </select>
+          </label>
+          <label>数据集配置<input id="data" value="coco8.yaml" /></label>
+        </form>
+        <div class="actions">
+          <button id="start-training">开始训练</button>
+          <button id="stop-training" class="secondary" disabled>停止</button>
+        </div>
+        <pre id="training-command"></pre>
+      </section>
+
+      <section class="card">
+        <h2>训练过程观察</h2>
+        <div class="progress-wrap">
+          <div class="progress-bar" id="train-progress"></div>
+        </div>
+        <canvas id="metrics-canvas" width="700" height="220"></canvas>
+        <pre id="train-log"></pre>
+      </section>
+
+      <section class="card">
+        <h2>数据集管理</h2>
+        <form id="dataset-form" class="grid-2">
+          <input id="dataset-name" placeholder="数据集名称" required />
+          <input id="dataset-path" placeholder="train 路径，如 datasets/my/train" required />
+          <input id="dataset-val" placeholder="val 路径，如 datasets/my/val" required />
+          <input id="dataset-nc" type="number" min="1" value="1" required />
+          <input id="dataset-classes" placeholder="类别名，用逗号分隔，如 cat,dog" required />
+          <button id="save-dataset" type="submit">新增 / 更新数据集</button>
+        </form>
+        <table>
+          <thead>
+            <tr>
+              <th>名称</th>
+              <th>train</th>
+              <th>val</th>
+              <th>nc</th>
+              <th>类别</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="dataset-body"></tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>YOLO YAML 架构可视化与编辑</h2>
+        <textarea id="yaml-input" rows="11"># 简化示例
+backbone:
+  - [-1, 1, Conv, [64, 3, 2]] # in=640x640x3 out=320x320x64
+  - [-1, 1, C2f, [128, True]] # in=320x320x64 out=160x160x128
+head:
+  - [-1, 1, Detect, [80]] # in=160x160x128 out=160x160x80</textarea>
+        <div class="actions">
+          <button id="parse-yaml">解析 YAML 并可视化</button>
+          <button id="add-module" class="secondary">新增模块</button>
+        </div>
+
+        <div class="grid-2">
+          <table>
+            <thead>
+              <tr><th>#</th><th>模块</th><th>from</th><th>repeat</th><th>args</th><th>输入形状</th><th>输出形状</th><th>操作</th></tr>
+            </thead>
+            <tbody id="module-table"></tbody>
+          </table>
+
+          <form id="module-editor">
+            <h3>图形化模块编辑</h3>
+            <label>索引<input id="mod-index" type="number" min="0" /></label>
+            <label>from<input id="mod-from" value="-1" /></label>
+            <label>repeat<input id="mod-repeat" type="number" min="1" value="1" /></label>
+            <label>module<input id="mod-name" value="Conv" /></label>
+            <label>args<input id="mod-args" value="[64,3,2]" /></label>
+            <label>输入形状<input id="mod-in" value="640x640x3" /></label>
+            <label>输出形状<input id="mod-out" value="320x320x64" /></label>
+            <div class="actions">
+              <button type="submit">保存模块</button>
+              <button type="button" id="delete-module" class="secondary">删除模块</button>
+            </div>
+          </form>
+        </div>
+
+        <svg id="graph" viewBox="0 0 760 320"></svg>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

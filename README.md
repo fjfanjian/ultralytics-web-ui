@@ -1,1 +1,13 @@
 # ultralytics-web-ui
+
+一个轻量级的 Ultralytics Web 前端原型，支持：
+
+- 图形化配置训练参数并启动训练
+- 实时观察训练进度、日志与指标曲线（模拟）
+- 在界面中新增、编辑、删除数据集配置
+- 解析 YOLO YAML 模块结构，展示模块输入/输出形状
+- 通过图形化模块编辑器进行网络模块增删改、上下重排（支持自定义创新模块）
+
+## 使用方式
+
+直接在浏览器中打开 `/home/runner/work/ultralytics-web-ui/ultralytics-web-ui/index.html` 即可。
