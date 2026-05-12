@@ -25,7 +25,13 @@ const $ = (id) => document.getElementById(id);
 const logBox = $("train-log");
 const progressBar = $("train-progress");
 const commandBox = $("training-command");
-const esc = (v) =>
+const TRAINING_SIMULATION_CONFIG = {
+  minLoss: 0.05,
+  baseLoss: 1.9,
+  baseMap: 0.1,
+  tickIntervalMs: 120,
+};
+const escapeHtml = (v) =>
   String(v)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -45,11 +51,11 @@ function renderDatasetTable() {
   for (const dataset of state.datasets) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${esc(dataset.name)}</td>
-      <td>${esc(dataset.train)}</td>
-      <td>${esc(dataset.val)}</td>
-      <td>${esc(dataset.nc)}</td>
-      <td>${esc(dataset.classes.join(", "))}</td>
+      <td>${escapeHtml(dataset.name)}</td>
+      <td>${escapeHtml(dataset.train)}</td>
+      <td>${escapeHtml(dataset.val)}</td>
+      <td>${escapeHtml(dataset.nc)}</td>
+      <td>${escapeHtml(dataset.classes.join(", "))}</td>
       <td>
         <button data-action="edit" data-id="${dataset.id}">编辑</button>
         <button data-action="delete" data-id="${dataset.id}" class="secondary">删除</button>
@@ -84,13 +90,19 @@ $("dataset-body").addEventListener("click", (e) => {
 
 $("dataset-form").addEventListener("submit", (e) => {
   e.preventDefault();
+  const rawClassTokens = $("dataset-classes").value.split(",");
   const payload = {
     name: $("dataset-name").value.trim(),
     train: $("dataset-path").value.trim(),
     val: $("dataset-val").value.trim(),
     nc: Number($("dataset-nc").value),
-    classes: $("dataset-classes").value.split(",").map((v) => v.trim()).filter(Boolean),
+    classes: rawClassTokens.map((v) => v.trim()).filter(Boolean),
   };
+
+  if (rawClassTokens.some((v) => !v.trim())) {
+    appendLog("类别名中包含空值，请修正后再保存");
+    return;
+  }
 
   if (!payload.name || !payload.train || !payload.val || payload.nc < 1 || payload.classes.length < 1) {
     appendLog("数据集字段不完整，保存失败");
@@ -146,13 +158,15 @@ function parseYaml() {
     const args = rest.join(",").trim();
     const inMatch = comment.match(/in=([^\s]+)/);
     const outMatch = comment.match(/out=([^\s]+)/);
-    const outputShape = outMatch ? outMatch[1] : modules.at(-1)?.outputShape || "unknown";
+    // 简化推断：默认沿用上一层输出作为当前输入形状，不覆盖复杂多分支拓扑。
+    const inferredInputShape = inMatch ? inMatch[1] : modules.at(-1)?.outputShape || "unknown";
+    const outputShape = outMatch ? outMatch[1] : inferredInputShape;
     modules.push({
       from: from || "-1",
       repeat: Number(repeat) || 1,
       module: (module || "Custom").trim(),
       args: args || "[]",
-      inputShape: inMatch ? inMatch[1] : modules.at(-1)?.outputShape || "unknown",
+      inputShape: inferredInputShape,
       outputShape,
     });
   }
@@ -167,12 +181,12 @@ function renderModules() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${index}</td>
-      <td>${esc(mod.module)}</td>
-      <td>${esc(mod.from)}</td>
-      <td>${esc(mod.repeat)}</td>
-      <td>${esc(mod.args)}</td>
-      <td>${esc(mod.inputShape)}</td>
-      <td>${esc(mod.outputShape)}</td>
+      <td>${escapeHtml(mod.module)}</td>
+      <td>${escapeHtml(mod.from)}</td>
+      <td>${escapeHtml(mod.repeat)}</td>
+      <td>${escapeHtml(mod.args)}</td>
+      <td>${escapeHtml(mod.inputShape)}</td>
+      <td>${escapeHtml(mod.outputShape)}</td>
       <td>
         <button data-select-module="${index}">编辑</button>
         <button data-move-up="${index}" class="secondary">上移</button>
@@ -226,13 +240,19 @@ function loadModule(i) {
   $("mod-out").value = mod.outputShape;
 }
 
+function getSelectedModuleIndex() {
+  const i = Number($("mod-index").value);
+  if (!Number.isInteger(i) || i < 0 || i >= state.modules.length) return null;
+  return i;
+}
+
 $("add-module").addEventListener("click", () => {
   state.modules.push({
     from: "-1",
     repeat: 1,
     module: "CustomBlock",
     args: "[128, 3]",
-    inputShape: state.modules.at(-1)?.outputShape || "unknown",
+    inputShape: state.modules.at(-1)?.outputShape || "640x640x3",
     outputShape: "unknown",
   });
   renderModules();
@@ -241,8 +261,8 @@ $("add-module").addEventListener("click", () => {
 
 $("module-editor").addEventListener("submit", (e) => {
   e.preventDefault();
-  const i = Number($("mod-index").value);
-  if (!Number.isInteger(i) || i < 0 || i >= state.modules.length) {
+  const i = getSelectedModuleIndex();
+  if (i === null) {
     appendLog("请先选择有效模块索引");
     return;
   }
@@ -261,8 +281,8 @@ $("module-editor").addEventListener("submit", (e) => {
 });
 
 $("delete-module").addEventListener("click", () => {
-  const i = Number($("mod-index").value);
-  if (!Number.isInteger(i) || i < 0 || i >= state.modules.length) return;
+  const i = getSelectedModuleIndex();
+  if (i === null) return;
   state.modules.splice(i, 1);
   renderModules();
   appendLog(`模块 ${i} 已删除`);
@@ -290,7 +310,7 @@ function renderMetrics() {
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  const maxLoss = Math.max(...state.training.loss, 1);
+  const maxLoss = Math.max(0.1, state.training.loss.reduce((max, value) => Math.max(max, value), 0));
   drawLine(ctx, state.training.loss, "#dc2626", maxLoss);
   drawLine(ctx, state.training.map50, "#2563eb", 1);
 
@@ -329,19 +349,22 @@ function startTraining() {
 
   state.training.timer = setInterval(() => {
     state.training.epoch += 1;
-    const p = state.training.epoch / state.training.totalEpochs;
-    const loss = Math.max(0.05, 1.9 * (1 - p) + Math.random() * 0.1);
-    const map = Math.min(0.9, 0.1 + p * 0.8 + Math.random() * 0.03);
+    const progress = state.training.epoch / state.training.totalEpochs;
+    const loss = Math.max(
+      TRAINING_SIMULATION_CONFIG.minLoss,
+      TRAINING_SIMULATION_CONFIG.baseLoss * (1 - progress) + Math.random() * 0.1,
+    );
+    const map = Math.min(0.9, TRAINING_SIMULATION_CONFIG.baseMap + progress * 0.8 + Math.random() * 0.03);
     state.training.loss.push(Number(loss.toFixed(3)));
     state.training.map50.push(Number(map.toFixed(3)));
-    progressBar.style.width = `${(p * 100).toFixed(1)}%`;
+    progressBar.style.width = `${(progress * 100).toFixed(1)}%`;
     appendLog(`epoch ${state.training.epoch}/${state.training.totalEpochs} - loss=${loss.toFixed(3)} mAP50=${map.toFixed(3)}`);
     renderMetrics();
 
     if (state.training.epoch >= state.training.totalEpochs) {
       stopTraining(true);
     }
-  }, 120);
+  }, TRAINING_SIMULATION_CONFIG.tickIntervalMs);
 }
 
 function stopTraining(done = false) {

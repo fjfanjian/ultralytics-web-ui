@@ -10,4 +10,4 @@
 
 ## 使用方式
 
-直接在浏览器中打开 `/home/runner/work/ultralytics-web-ui/ultralytics-web-ui/index.html` 即可。
+直接在浏览器中打开仓库根目录下的 `index.html` 即可。
